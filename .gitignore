@@ -15,7 +15,6 @@ wheels/
 # Generated indexes and embeddings
 cache/
 *.npy
-*.pkl
 
 # Full dataset (large; see README)
 data/movies.json

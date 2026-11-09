@@ -20,7 +20,7 @@ CACHE_ROOT = Path(os.environ.get("RAG_CACHE_DIR", "cache"))
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 CLIP_MODEL = "clip-ViT-B-32"
 CROSS_ENCODER_MODEL = "cross-encoder/ms-marco-TinyBERT-L2-v2"
-LLM_MODEL = os.environ.get("RAG_LLM_MODEL", "openrouter/free")
+LLM_MODEL = os.environ.get("RAG_LLM_MODEL", "nvidia/nemotron-3.5-super-vl:free")
 LLM_BASE_URL = "https://openrouter.ai/api/v1"
 SERVICE_NAME = os.environ.get("RAG_SERVICE_NAME", "Webflyx")
 
@@ -38,6 +38,7 @@ CANDIDATE_MULTIPLIER = 50  # candidates fetched per retriever = limit * multipli
 RERANK_OVERSAMPLE = 5  # fetch limit * oversample results before reranking
 
 # LLM calls.
+RERANK_WORKERS = 4  # concurrent requests for individual reranking
 MAX_RETRIES = 3
 RETRY_DELAY = 2.0  # seconds
 LLM_DOCUMENT_CHARS = 800  # description characters included in each LLM prompt

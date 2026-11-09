@@ -29,6 +29,16 @@ def unit_float(value: str) -> float:
     return number
 
 
+def add_filter_option(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--filter",
+        action="append",
+        default=[],
+        metavar="FIELD=VALUE",
+        help="only return documents whose FIELD equals VALUE (case-insensitive); repeatable",
+    )
+
+
 def load_documents(args: argparse.Namespace) -> tuple[list[dict], Path]:
     """Load the selected dataset and return it with its cache directory."""
     path = resolve_dataset_path(args.dataset)

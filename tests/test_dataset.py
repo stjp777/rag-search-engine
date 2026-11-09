@@ -45,3 +45,21 @@ def test_cache_dir_changes_with_contents(tmp_path):
     before = cache_dir_for(path)
     write(tmp_path, [{"id": 1, "title": "A", "description": "changed"}])
     assert cache_dir_for(path) != before
+
+
+def test_parse_filters():
+    from rag_search.dataset import parse_filters
+
+    assert parse_filters(["genre=Comedy", " year = 1999 "]) == {"genre": "Comedy", "year": "1999"}
+    with pytest.raises(ValueError):
+        parse_filters(["genre"])
+
+
+def test_matches_filters():
+    from rag_search.dataset import matches_filters
+
+    doc = {"genre": ["Comedy", "Family"], "year": 1999}
+    assert matches_filters(doc, {"genre": "comedy", "year": "1999"})
+    assert not matches_filters(doc, {"genre": "Horror"})
+    assert not matches_filters(doc, {"rating": "PG"})
+    assert matches_filters(doc, None)

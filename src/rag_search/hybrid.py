@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from rag_search.config import CANDIDATE_MULTIPLIER, RRF_K
+from rag_search.dataset import matches_filters
 from rag_search.fusion import hybrid_score, normalize, rrf_score
 from rag_search.keyword import InvertedIndex
 from rag_search.semantic import ChunkedSemanticSearch
@@ -16,16 +17,33 @@ class HybridSearch:
         self.semantic.load_or_create_chunk_embeddings()
         self.keyword = InvertedIndex.load_or_build(documents, cache_dir)
 
-    def _pool_size(self, limit: int) -> int:
-        return min(len(self.documents), limit * CANDIDATE_MULTIPLIER)
+    def _candidates(
+        self, query: str, limit: int, filters: dict[str, str] | None
+    ) -> tuple[list[tuple], list[dict]]:
+        """Return keyword and semantic candidates, restricted to documents matching ``filters``.
 
-    def weighted_search(self, query: str, alpha: float, limit: int = 5) -> list[dict]:
+        With filters the whole corpus is searched first so that enough matching
+        documents remain after filtering.
+        """
+        pool = (
+            len(self.documents)
+            if filters
+            else min(len(self.documents), limit * CANDIDATE_MULTIPLIER)
+        )
+        keyword = self.keyword.bm25_search(query, pool)
+        semantic = self.semantic.search_chunks(query, pool)
+        if filters:
+            keyword = [(i, s) for i, s in keyword if matches_filters(self.documents[i], filters)]
+            semantic = [r for r in semantic if matches_filters(self.documents[r["id"]], filters)]
+        return keyword, semantic
+
+    def weighted_search(
+        self, query: str, alpha: float, limit: int = 5, filters: dict[str, str] | None = None
+    ) -> list[dict]:
         """Blend normalised keyword and semantic scores; ``alpha`` weights the keyword side."""
         if not 0 <= alpha <= 1:
             raise ValueError("alpha must be between 0 and 1")
-        pool = self._pool_size(limit)
-        keyword = self.keyword.bm25_search(query, pool)
-        semantic = self.semantic.search_chunks(query, pool)
+        keyword, semantic = self._candidates(query, limit, filters)
 
         scores: dict = {}
         for (doc_id, _), value in zip(keyword, normalize([s for _, s in keyword]), strict=True):
@@ -48,11 +66,15 @@ class HybridSearch:
         results.sort(key=lambda r: r["hybrid_score"], reverse=True)
         return results[:limit]
 
-    def rrf_search(self, query: str, k: int = RRF_K, limit: int = 10) -> list[dict]:
+    def rrf_search(
+        self,
+        query: str,
+        k: int = RRF_K,
+        limit: int = 10,
+        filters: dict[str, str] | None = None,
+    ) -> list[dict]:
         """Combine the keyword and semantic rankings with Reciprocal Rank Fusion."""
-        pool = self._pool_size(limit)
-        keyword = self.keyword.bm25_search(query, pool)
-        semantic = self.semantic.search_chunks(query, pool)
+        keyword, semantic = self._candidates(query, limit, filters)
 
         ranks: dict = {}
         for rank, (doc_id, _) in enumerate(keyword, start=1):

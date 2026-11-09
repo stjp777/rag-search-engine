@@ -1,7 +1,7 @@
 """Keyword search: tokenizer, inverted index, TF-IDF and BM25."""
 
+import json
 import math
-import pickle
 import string
 from collections import Counter
 from collections.abc import Sequence
@@ -14,7 +14,7 @@ from nltk.stem import PorterStemmer
 from rag_search.config import BM25_B, BM25_K1
 from rag_search.errors import IndexNotFoundError
 
-INDEX_FILENAME = "index.pkl"
+INDEX_FILENAME = "keyword_index.json"
 
 _STEMMER = PorterStemmer()
 # Apostrophes are dropped ("don't" -> "dont"); other punctuation separates words.
@@ -77,27 +77,44 @@ class InvertedIndex:
         self._update_average_length()
 
     def save(self, cache_dir: Path) -> None:
+        """Write the index as JSON. Documents are referenced by position in ``doc_ids``."""
         cache_dir.mkdir(parents=True, exist_ok=True)
+        doc_ids = list(self.doc_lengths)
+        position = {doc_id: i for i, doc_id in enumerate(doc_ids)}
         payload = {
-            "index": self.index,
-            "term_frequencies": self.term_frequencies,
-            "doc_lengths": self.doc_lengths,
+            "doc_ids": doc_ids,
+            "doc_lengths": [self.doc_lengths[doc_id] for doc_id in doc_ids],
+            "term_frequencies": [dict(self.term_frequencies[doc_id]) for doc_id in doc_ids],
+            "index": {
+                term: sorted(position[doc_id] for doc_id in docs)
+                for term, docs in self.index.items()
+            },
         }
-        with (cache_dir / INDEX_FILENAME).open("wb") as file:
-            pickle.dump(payload, file)
+        (cache_dir / INDEX_FILENAME).write_text(json.dumps(payload), encoding="utf-8")
 
     def load(self, cache_dir: Path) -> None:
-        """Load a previously saved index. Only load caches this program wrote."""
+        """Load a saved index, rejecting one that does not match the current documents."""
         path = cache_dir / INDEX_FILENAME
         if not path.is_file():
             raise IndexNotFoundError(
                 "Keyword index not found. Run `rag-search keyword build` first."
             )
-        with path.open("rb") as file:
-            payload = pickle.load(file)
-        self.index = payload["index"]
-        self.term_frequencies = payload["term_frequencies"]
-        self.doc_lengths = payload["doc_lengths"]
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            doc_ids = payload["doc_ids"]
+            self.doc_lengths = dict(zip(doc_ids, payload["doc_lengths"], strict=True))
+            self.term_frequencies = {
+                doc_id: Counter(tf)
+                for doc_id, tf in zip(doc_ids, payload["term_frequencies"], strict=True)
+            }
+            self.index = {
+                term: {doc_ids[i] for i in positions}
+                for term, positions in payload["index"].items()
+            }
+        except (KeyError, ValueError, IndexError, TypeError) as exc:
+            raise IndexNotFoundError(
+                f"Keyword index at {path} is unreadable. Run `rag-search keyword build`."
+            ) from exc
         self._update_average_length()
 
     @classmethod

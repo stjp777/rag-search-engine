@@ -67,6 +67,31 @@ def validate_documents(records: list) -> list[Document]:
     return documents
 
 
+def parse_filters(expressions: list[str]) -> dict[str, str]:
+    """Turn ``["genre=Comedy", "year=1999"]`` into ``{"genre": "Comedy", "year": "1999"}``."""
+    filters = {}
+    for expression in expressions:
+        field, separator, value = expression.partition("=")
+        if not separator or not field.strip() or not value.strip():
+            raise ValueError(f"Invalid filter {expression!r}; use field=value")
+        filters[field.strip()] = value.strip()
+    return filters
+
+
+def matches_filters(document: Document, filters: dict[str, str] | None) -> bool:
+    """True if the document satisfies every ``field -> value`` filter.
+
+    Comparison ignores case. A list-valued field matches if any element does.
+    A document without the field never matches.
+    """
+    for field, wanted in (filters or {}).items():
+        actual = document.get(field)
+        values = actual if isinstance(actual, list) else [actual]
+        if not any(v is not None and str(v).casefold() == wanted.casefold() for v in values):
+            return False
+    return True
+
+
 def cache_dir_for(path: str | os.PathLike) -> Path:
     """Return a cache directory unique to the dataset's name and contents.
 

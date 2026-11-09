@@ -3,6 +3,7 @@
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
 
 from rag_search import config
@@ -41,13 +42,8 @@ def parse_id_list(text: str) -> list:
     return parsed
 
 
-def rerank_individual(query: str, results: list[dict]) -> list[dict]:
-    """Ask the LLM to score each result from 0 to 10, then sort by score.
-
-    A result that could not be scored gets ``rerank_score = None`` and sorts last.
-    """
-    for result in results:
-        prompt = f"""Rate how well this movie matches the search query.
+def _score_one(query: str, result: dict) -> float | None:
+    prompt = f"""Rate how well this movie matches the search query.
 
 Query: "{query}"
 Movie: {format_documents([result], config.LLM_DOCUMENT_CHARS)}
@@ -61,11 +57,23 @@ Rate 0-10 (10 = perfect match).
 Output ONLY the number, no other text or explanation.
 
 Score:"""
-        try:
-            result["rerank_score"] = ask(prompt, parse=parse_score)
-        except LLMError as exc:
-            logger.warning("Could not score %r: %s", result["title"], exc)
-            result["rerank_score"] = None
+    try:
+        return ask(prompt, parse=parse_score)
+    except LLMError as exc:
+        logger.warning("Could not score %r: %s", result["title"], exc)
+        return None
+
+
+def rerank_individual(query: str, results: list[dict]) -> list[dict]:
+    """Ask the LLM to score each result from 0 to 10, then sort by score.
+
+    Requests run concurrently. A result that could not be scored gets
+    ``rerank_score = None`` and sorts last.
+    """
+    with ThreadPoolExecutor(max_workers=config.RERANK_WORKERS) as pool:
+        scores = list(pool.map(lambda result: _score_one(query, result), results))
+    for result, score in zip(results, scores, strict=True):
+        result["rerank_score"] = score
     return sorted(
         results,
         key=lambda r: -1 if r["rerank_score"] is None else r["rerank_score"],

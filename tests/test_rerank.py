@@ -70,3 +70,10 @@ def test_individual_rerank_sorts_by_score_and_marks_failures(monkeypatch):
 def test_unknown_method():
     with pytest.raises(ValueError):
         rerank.rerank("q", fresh(), "magic")
+
+
+def test_individual_rerank_runs_concurrently_and_keeps_scores_aligned(monkeypatch):
+    docs = [{"id": i, "title": f"T{i}", "description": f"desc{i}"} for i in range(10)]
+    monkeypatch.setattr(rerank, "ask", lambda prompt, parse: float(prompt.split("desc")[1][0]))
+    ranked = rerank.rerank_individual("q", docs)
+    assert [r["id"] for r in ranked] == list(range(9, -1, -1))

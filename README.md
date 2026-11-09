@@ -62,7 +62,13 @@ uv run rag-search image search data/paddington.jpeg
 uv run rag-search evaluate --limit 5
 ```
 
-Rerank methods: `individual` (LLM scores each result), `batch` (LLM orders all results in one request), `cross-encoder` (local model).
+Hybrid search can be limited to documents with a matching field value. A list-valued field matches if any element does, and comparison ignores case:
+
+```bash
+uv run rag-search --dataset books.json hybrid rrf "a dragon guarding gold" --filter genre=fantasy --filter year=2001
+```
+
+Rerank methods: `individual` (LLM scores each result, several requests at a time), `batch` (LLM orders all results in one request), `cross-encoder` (local model).
 
 ## Using your own dataset
 
@@ -72,7 +78,7 @@ Point the tool at any JSON file with `--dataset` or the `RAG_DATASET` environmen
 uv run rag-search --dataset path/to/books.json hybrid rrf "a dragon guarding gold"
 ```
 
-The file must be a list of records, or an object with the list under a `"documents"` or `"movies"` key. Each record needs these fields; extra fields are ignored.
+The file must be a list of records, or an object with the list under a `"documents"` or `"movies"` key. Each record needs these fields. Extra fields are kept and can be used for filtering.
 
 ```json
 [
@@ -98,8 +104,10 @@ The `evaluate` command reads test cases from `data/golden_dataset.json` (or `--g
 | `OPENROUTER_API_KEY` | API key for LLM features | none |
 | `RAG_DATASET` | Dataset file | `data/sample_movies.json` |
 | `RAG_CACHE_DIR` | Cache directory | `cache` |
-| `RAG_LLM_MODEL` | Model name sent to OpenRouter | `openrouter/free` |
+| `RAG_LLM_MODEL` | Model name sent to OpenRouter | `nvidia/nemotron-3.5-super-vl:free` |
 | `RAG_SERVICE_NAME` | Service name used in generation prompts | `Webflyx` |
+
+The default model is a free OpenRouter model, which can be rate-limited or removed. Set `RAG_LLM_MODEL` to any OpenRouter model ID if it stops working. Image query rewriting needs a vision-capable model.
 
 Models, BM25 parameters, chunk sizes and other constants are in `src/rag_search/config.py`.
 
@@ -133,9 +141,10 @@ uv run ruff check .
 uv run ruff format .
 ```
 
+The same checks run in GitHub Actions on every push and pull request.
+
 ## Notes
 
-- Cached indexes use Python's `pickle` format. Only load caches your own installation created.
 - Embeddings are compared with brute-force cosine similarity, which is fine for tens of thousands of chunks but not for millions.
 
 ## License
