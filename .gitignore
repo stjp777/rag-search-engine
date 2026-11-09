@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info/
+
+# Environments and secrets
+.venv/
+.env
+.env.*
+!.env.example
+
+# Generated indexes and embeddings
+cache/
+*.npy
+*.pkl
+
+# Full dataset (large; see README)
+data/movies.json
+
+# Tools and editors
+.pytest_cache/
+.ruff_cache/
+.idea/
+.vscode/
+.DS_Store
